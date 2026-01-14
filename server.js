@@ -130,42 +130,44 @@ function clearUserNotificationTimeout(name) {
 function notifyNextInQueue() {
   const state = getState();
   const availableSlots = MAX_OUTSIDE - state.outside.length;
-  
+
+  // Clear notification timeouts for all queued users
+  for (let i = 0; i < state.queue.length; i++) {
+    clearUserNotificationTimeout(state.queue[i].name);
+  }
+
   if (availableSlots <= 0 || state.queue.length === 0) return;
-  
-  const toNotify = Math.min(availableSlots, state.queue.length);
-  
-  for (let i = 0; i < toNotify; i++) {
-    const queuedUser = state.queue[i];
-    const user = getUserByName(queuedUser.name);
-    
-    if (!user || user.notificationTimeout) continue;
-    
-    // Set up timeout
-    const timeoutId = setTimeout(() => {
-      // Remove user from queue after timeout
-      const currentUser = getUserByName(queuedUser.name);
-      if (currentUser && currentUser.status === 'queue') {
-        updateUserStatus(queuedUser.name, 'idle');
-        
-        // Emit to all sockets of this user
-        const sockets = getSocketsByName(queuedUser.name);
-        for (const sid of sockets) {
-          io.to(sid).emit('queue_timeout');
-        }
-        
-        broadcastState();
-        notifyNextInQueue();
+
+  // Always notify the first person in the queue if a slot is available
+  const queuedUser = state.queue[0];
+  const user = getUserByName(queuedUser.name);
+
+  if (!user) return;
+
+  // Set up timeout
+  const timeoutId = setTimeout(() => {
+    // Remove user from queue after timeout
+    const currentUser = getUserByName(queuedUser.name);
+    if (currentUser && currentUser.status === 'queue') {
+      updateUserStatus(queuedUser.name, 'idle');
+
+      // Emit to all sockets of this user
+      const sockets = getSocketsByName(queuedUser.name);
+      for (const sid of sockets) {
+        io.to(sid).emit('queue_timeout');
       }
-    }, NOTIFICATION_TIMEOUT);
-    
-    user.notificationTimeout = timeoutId;
-    
-    // Notify all sockets of this user
-    const sockets = getSocketsByName(queuedUser.name);
-    for (const socketId of sockets) {
-      io.to(socketId).emit('your_turn');
+
+      broadcastState();
+      notifyNextInQueue();
     }
+  }, NOTIFICATION_TIMEOUT);
+
+  user.notificationTimeout = timeoutId;
+
+  // Notify all sockets of this user
+  const sockets = getSocketsByName(queuedUser.name);
+  for (const socketId of sockets) {
+    io.to(socketId).emit('your_turn');
   }
 }
 
@@ -223,24 +225,34 @@ io.on('connection', (socket) => {
   socket.on('leave_class', () => {
     const user = users.get(socket.id);
     if (!user) return;
-    
+
     const state = getState();
-    
-    if (user.status === 'idle' || user.status === 'queue') {
-      // Clear any existing notification timeout
-      clearUserNotificationTimeout(user.name);
-      
-      if (state.outside.length < MAX_OUTSIDE) {
-        // Go outside
+    const outsideFull = state.outside.length >= MAX_OUTSIDE;
+    const queueNotEmpty = state.queue.length > 0;
+    const isUserQueued = state.queue.some(u => u.name.toLowerCase() === user.name.toLowerCase());
+    const isFirstInQueue = queueNotEmpty && state.queue[0].name.toLowerCase() === user.name.toLowerCase();
+
+    // Clear any existing notification timeout
+    clearUserNotificationTimeout(user.name);
+
+    if (queueNotEmpty) {
+      // If there is a queue, only first in queue can leave
+      if (isUserQueued && isFirstInQueue && !outsideFull) {
         updateUserStatus(user.name, 'outside');
       } else {
-        // Join queue
         updateUserStatus(user.name, 'queue');
       }
-      
-      broadcastState();
-      notifyNextInQueue();
+    } else {
+      // No queue, anyone can leave if there is space
+      if (!outsideFull) {
+        updateUserStatus(user.name, 'outside');
+      } else {
+        updateUserStatus(user.name, 'queue');
+      }
     }
+
+    broadcastState();
+    notifyNextInQueue();
   });
   
   // Come back

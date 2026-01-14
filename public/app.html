@@ -210,11 +210,20 @@
             // Find current user's status in state
             const nameLower = userName.toLowerCase();
             let found = false;
-            for (const user of state.outside) {
-                if (user.name.toLowerCase() === nameLower) {
-                    userStatus = 'outside';
+            // If there is a queue and a slot, first in queue gets 'idle' (can leave)
+            if (state.queue.length > 0 && state.outside.length < 4) {
+                if (state.queue[0].name.toLowerCase() === nameLower) {
+                    userStatus = 'idle';
                     found = true;
-                    break;
+                }
+            }
+            if (!found) {
+                for (const user of state.outside) {
+                    if (user.name.toLowerCase() === nameLower) {
+                        userStatus = 'outside';
+                        found = true;
+                        break;
+                    }
                 }
             }
             if (!found) {
