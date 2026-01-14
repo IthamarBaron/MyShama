@@ -207,6 +207,29 @@
 
         socket.on('state_update', (state) => {
             updateUI(state);
+            // Find current user's status in state
+            const nameLower = userName.toLowerCase();
+            let found = false;
+            for (const user of state.outside) {
+                if (user.name.toLowerCase() === nameLower) {
+                    userStatus = 'outside';
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                for (const user of state.queue) {
+                    if (user.name.toLowerCase() === nameLower) {
+                        userStatus = 'queue';
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                userStatus = 'idle';
+            }
+            updateButton();
         });
 
         socket.on('your_turn', () => {
@@ -239,15 +262,15 @@
         document.getElementById('mainActionBtn').addEventListener('click', () => {
             if (userStatus === 'idle') {
                 socket.emit('leave_class');
-                userStatus = 'queue';
+                // Do not set userStatus here; wait for server update
             } else if (userStatus === 'outside') {
                 socket.emit('come_back');
-                userStatus = 'idle';
+                // Do not set userStatus here; wait for server update
             } else if (userStatus === 'queue') {
                 socket.emit('leave_queue');
-                userStatus = 'idle';
+                // Do not set userStatus here; wait for server update
             }
-            updateButton();
+            // updateButton(); // No need to call here, will update on server response
         });
 
         // Handle tab close
