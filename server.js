@@ -200,7 +200,7 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // If the name is already in use by any other socket, block
+    // If the name is already in use by any socket, block
     if (nameToSockets.has(nameLower) && nameToSockets.get(nameLower).size > 0) {
       socket.emit('login_error', 'Name already in use');
       return;

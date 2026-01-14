@@ -78,6 +78,7 @@
         let currentLang = localStorage.getItem('lang') || 'en';
         let userStatus = 'idle';
         let notificationPermission = Notification.permission;
+        let loginBlocked = false;
 
         function setLanguage(lang) {
             currentLang = lang;
@@ -200,12 +201,23 @@
             socket.emit('request_state');
         });
 
+        socket.on('login_error', (msg) => {
+            // Show error message and disable main action button
+            const btn = document.getElementById('mainActionBtn');
+            btn.textContent = msg === 'Name already in use' ? 'Name active in another tab' : msg;
+            btn.disabled = true;
+            btn.className = 'w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200 bg-gray-400 cursor-not-allowed';
+            loginBlocked = true;
+        });
+
         socket.on('user_status', (data) => {
+            if (loginBlocked) return;
             userStatus = data.status;
             updateButton();
         });
 
         socket.on('state_update', (state) => {
+            if (loginBlocked) return;
             updateUI(state);
             // Find current user's status in state
             const nameLower = userName.toLowerCase();
@@ -242,6 +254,7 @@
         });
 
         socket.on('your_turn', () => {
+            if (loginBlocked) return;
             userStatus = 'idle';
             updateButton();
 
@@ -260,6 +273,7 @@
         });
 
         socket.on('queue_timeout', () => {
+            if (loginBlocked) return;
             userStatus = 'idle';
             updateButton();
             const message = currentLang === 'en'
@@ -269,6 +283,7 @@
         });
 
         document.getElementById('mainActionBtn').addEventListener('click', () => {
+            if (loginBlocked) return;
             if (userStatus === 'idle') {
                 socket.emit('leave_class');
                 // Do not set userStatus here; wait for server update
