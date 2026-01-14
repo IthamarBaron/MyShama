@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Classroom Queue</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+        <div class="text-center mb-6">
+            <svg class="w-16 h-16 mx-auto text-blue-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path>
+            </svg>
+            <h1 class="text-2xl font-bold text-gray-800" data-en="Join Classroom Queue" data-he="הצטרף לתור כיתתי">Join Classroom Queue</h1>
+        </div>
+
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label for="nameInput" class="block text-sm font-medium text-gray-700 mb-2" data-en="Enter Your Name" data-he="הזן את שמך">Enter Your Name</label>
+                <input 
+                    type="text" 
+                    id="nameInput" 
+                    maxlength="30"
+                    class="w-full px-4 py-3 border-2 border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 transition"
+                    required
+                    autocomplete="off"
+                >
+            </div>
+
+            <button 
+                type="submit"
+                class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200"
+                data-en="Join Queue" data-he="הצטרף לתור"
+            >
+                Join Queue
+            </button>
+
+            <div id="errorMsg" class="text-red-600 text-sm text-center hidden"></div>
+        </form>
+
+        <div class="mt-6 pt-6 border-t border-gray-200">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3" data-en="Current Status:" data-he="סטטוס נוכחי:">Current Status:</h3>
+            <div class="space-y-2 text-sm text-gray-600">
+                <div class="flex justify-between">
+                    <span data-en="Outside:" data-he="בחוץ:">Outside:</span>
+                    <span id="outsideCount">0/4</span>
+                </div>
+                <div class="flex justify-between">
+                    <span data-en="In Queue:" data-he="בתור:">In Queue:</span>
+                    <span id="queueCount">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center">
+            <button 
+                id="langToggle" 
+                class="text-sm text-blue-600 hover:text-blue-800 transition"
+            >
+                עברית / English
+            </button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const loginForm = document.getElementById('loginForm');
+        const nameInput = document.getElementById('nameInput');
+        const errorMsg = document.getElementById('errorMsg');
+        const outsideCount = document.getElementById('outsideCount');
+        const queueCount = document.getElementById('queueCount');
+        const langToggle = document.getElementById('langToggle');
+
+        let currentLang = localStorage.getItem('lang') || 'en';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+            document.documentElement.lang = lang === 'he' ? 'he' : 'en';
+            
+            document.querySelectorAll('[data-en][data-he]').forEach(el => {
+                el.textContent = el.getAttribute(`data-${lang}`);
+            });
+        }
+
+        langToggle.addEventListener('click', () => {
+            setLanguage(currentLang === 'en' ? 'he' : 'en');
+        });
+
+        setLanguage(currentLang);
+
+        socket.on('state_update', (state) => {
+            outsideCount.textContent = `${state.outside.length}/4`;
+            queueCount.textContent = state.queue.length;
+        });
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = nameInput.value.trim();
+            
+            if (name) {
+                localStorage.setItem('userName', name);
+                socket.emit('login', name);
+            }
+        });
+
+        socket.on('login_success', (data) => {
+            window.location.href = '/app';
+        });
+
+        socket.on('login_error', (message) => {
+            errorMsg.textContent = message;
+            errorMsg.classList.remove('hidden');
+            setTimeout(() => {
+                errorMsg.classList.add('hidden');
+            }, 3000);
+        });
+
+        // Check if already logged in
+        const savedName = localStorage.getItem('userName');
+        if (savedName) {
+            window.location.href = '/app';
+        }
+    </script>
+</body>
+</html>

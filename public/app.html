@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom Queue</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen p-4">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-gray-800" data-en="Classroom Queue" data-he="תור כיתתי">Classroom Queue</h1>
+                <div class="flex items-center gap-4">
+                    <button 
+                        id="langToggle" 
+                        class="text-sm text-blue-600 hover:text-blue-800 transition"
+                    >
+                        עברית / English
+                    </button>
+                    <span class="text-sm text-gray-600">
+                        <span data-en="Logged in as:" data-he="מחובר בתור:">Logged in as:</span>
+                        <strong id="userName"></strong>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <button 
+                id="mainActionBtn"
+                class="w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200"
+            >
+            </button>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex items-center gap-2 mb-4">
+                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                <h2 class="text-lg font-semibold text-gray-800">
+                    <span data-en="Currently Outside" data-he="כרגע בחוץ">Currently Outside</span>
+                    (<span id="outsideCountText">0/4</span>)
+                </h2>
+            </div>
+            <div id="outsideList" class="grid grid-cols-2 gap-3">
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center gap-2 mb-4">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <h2 class="text-lg font-semibold text-gray-800">
+                    <span data-en="Queue" data-he="תור">Queue</span>
+                    (<span id="queueCountText">0</span>)
+                </h2>
+            </div>
+            <div id="queueList">
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const userName = localStorage.getItem('userName');
+        
+        if (!userName) {
+            window.location.href = '/';
+        }
+
+        document.getElementById('userName').textContent = userName;
+
+        let currentLang = localStorage.getItem('lang') || 'en';
+        let userStatus = 'idle';
+        let notificationPermission = Notification.permission;
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', lang);
+            document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
+            document.documentElement.lang = lang === 'he' ? 'he' : 'en';
+            
+            document.querySelectorAll('[data-en][data-he]').forEach(el => {
+                el.textContent = el.getAttribute(`data-${lang}`);
+            });
+            
+            updateButton();
+        }
+
+        document.getElementById('langToggle').addEventListener('click', () => {
+            setLanguage(currentLang === 'en' ? 'he' : 'en');
+        });
+
+        setLanguage(currentLang);
+
+        // Request notification permission
+        if (notificationPermission === 'default') {
+            Notification.requestPermission().then(permission => {
+                notificationPermission = permission;
+            });
+        }
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString(currentLang === 'he' ? 'he-IL' : 'en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        function updateButton() {
+            const btn = document.getElementById('mainActionBtn');
+            const texts = {
+                en: {
+                    idle: 'Leave the Class',
+                    outside: "I'm Back",
+                    queue: 'Get Me Out of the Queue'
+                },
+                he: {
+                    idle: 'עזוב את הכיתה',
+                    outside: 'חזרתי',
+                    queue: 'הוצא אותי מהתור'
+                }
+            };
+
+            const colors = {
+                idle: 'bg-blue-600 hover:bg-blue-700',
+                outside: 'bg-green-600 hover:bg-green-700',
+                queue: 'bg-red-600 hover:bg-red-700'
+            };
+
+            btn.textContent = texts[currentLang][userStatus];
+            btn.className = `w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200 ${colors[userStatus]}`;
+        }
+
+        function updateUI(state) {
+            const outsideList = document.getElementById('outsideList');
+            const queueList = document.getElementById('queueList');
+            
+            document.getElementById('outsideCountText').textContent = `${state.outside.length}/4`;
+            document.getElementById('queueCountText').textContent = state.queue.length;
+
+            // Update outside list
+            outsideList.innerHTML = '';
+            if (state.outside.length === 0) {
+                outsideList.innerHTML = `<div class="col-span-2 text-center text-gray-400 py-8" data-en="No one outside" data-he="אין אף אחד בחוץ">No one outside</div>`;
+            } else {
+                state.outside.forEach(user => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-blue-50 border border-blue-200 rounded-lg p-3';
+                    const isCurrentUser = user.name.toLowerCase() === userName.toLowerCase();
+                    div.innerHTML = `
+                        <div class="font-semibold text-gray-800">${user.name}${isCurrentUser ? ' (You)' : ''}</div>
+                        <div class="text-xs text-gray-500 mt-1">${formatTime(user.joinedAt)}</div>
+                    `;
+                    outsideList.appendChild(div);
+                });
+            }
+
+            // Pad with empty slots
+            for (let i = state.outside.length; i < 4; i++) {
+                const div = document.createElement('div');
+                div.className = 'border-2 border-dashed border-gray-300 rounded-lg p-3 text-center text-gray-400';
+                div.textContent = currentLang === 'en' ? 'Empty' : 'ריק';
+                outsideList.appendChild(div);
+            }
+
+            // Update queue list
+            queueList.innerHTML = '';
+            if (state.queue.length === 0) {
+                queueList.innerHTML = `<div class="text-center text-gray-400 py-8" data-en="No one in queue" data-he="אין אף אחד בתור">No one in queue</div>`;
+            } else {
+                state.queue.forEach((user, index) => {
+                    const div = document.createElement('div');
+                    const isCurrentUser = user.name.toLowerCase() === userName.toLowerCase();
+                    div.className = `flex items-center gap-3 p-3 rounded-lg ${isCurrentUser ? 'bg-yellow-50 border-2 border-yellow-400' : 'bg-gray-50'}`;
+                    div.innerHTML = `
+                        <span class="flex-shrink-0 w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold">${index + 1}</span>
+                        <div class="flex-grow">
+                            <div class="font-semibold text-gray-800">${user.name}${isCurrentUser ? ' (You)' : ''}</div>
+                        </div>
+                    `;
+                    queueList.appendChild(div);
+                });
+            }
+
+            setLanguage(currentLang);
+        }
+
+        socket.on('connect', () => {
+            socket.emit('login', userName);
+        });
+
+        socket.on('login_success', () => {
+            socket.emit('request_state');
+        });
+
+        socket.on('user_status', (data) => {
+            userStatus = data.status;
+            updateButton();
+        });
+
+        socket.on('state_update', (state) => {
+            updateUI(state);
+        });
+
+        socket.on('your_turn', () => {
+            userStatus = 'idle';
+            updateButton();
+
+            const message = currentLang === 'en' 
+                ? "It's your turn to leave!" 
+                : '!זה התור שלך לצאת';
+
+            if (notificationPermission === 'granted') {
+                new Notification('Classroom Queue', {
+                    body: message,
+                    icon: '/favicon.ico'
+                });
+            } else {
+                alert(message);
+            }
+        });
+
+        socket.on('queue_timeout', () => {
+            userStatus = 'idle';
+            updateButton();
+            const message = currentLang === 'en'
+                ? 'You were removed from the queue (timeout)'
+                : 'הוסרת מהתור (תם הזמן)';
+            alert(message);
+        });
+
+        document.getElementById('mainActionBtn').addEventListener('click', () => {
+            if (userStatus === 'idle') {
+                socket.emit('leave_class');
+                userStatus = 'queue';
+            } else if (userStatus === 'outside') {
+                socket.emit('come_back');
+                userStatus = 'idle';
+            } else if (userStatus === 'queue') {
+                socket.emit('leave_queue');
+                userStatus = 'idle';
+            }
+            updateButton();
+        });
+
+        // Handle tab close
+        window.addEventListener('beforeunload', () => {
+            localStorage.removeItem('userName');
+        });
+    </script>
+</body>
+</html>
