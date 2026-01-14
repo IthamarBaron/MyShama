@@ -129,7 +129,7 @@ function clearUserNotificationTimeout(name) {
 // Notify next in queue
 function notifyNextInQueue() {
   const state = getState();
-  const availableSlots = MAX_OUTSIDE - state.outside.length;
+  const availableSlots = Math.max(0, MAX_OUTSIDE - state.outside.length);
 
   // Clear notification timeouts for all queued users
   for (let i = 0; i < state.queue.length; i++) {
@@ -138,36 +138,34 @@ function notifyNextInQueue() {
 
   if (availableSlots <= 0 || state.queue.length === 0) return;
 
-  // Always notify the first person in the queue if a slot is available
-  const queuedUser = state.queue[0];
-  const user = getUserByName(queuedUser.name);
+  // Notify up to N users in the queue, where N = availableSlots
+  const toNotify = Math.min(availableSlots, state.queue.length);
+  for (let i = 0; i < toNotify; i++) {
+    const queuedUser = state.queue[i];
+    const user = getUserByName(queuedUser.name);
+    if (!user) continue;
 
-  if (!user) return;
-
-  // Set up timeout
-  const timeoutId = setTimeout(() => {
-    // Remove user from queue after timeout
-    const currentUser = getUserByName(queuedUser.name);
-    if (currentUser && currentUser.status === 'queue') {
-      updateUserStatus(queuedUser.name, 'idle');
-
-      // Emit to all sockets of this user
-      const sockets = getSocketsByName(queuedUser.name);
-      for (const sid of sockets) {
-        io.to(sid).emit('queue_timeout');
+    // Set up timeout
+    const timeoutId = setTimeout(() => {
+      const currentUser = getUserByName(queuedUser.name);
+      if (currentUser && currentUser.status === 'queue') {
+        updateUserStatus(queuedUser.name, 'idle');
+        const sockets = getSocketsByName(queuedUser.name);
+        for (const sid of sockets) {
+          io.to(sid).emit('queue_timeout');
+        }
+        broadcastState();
+        notifyNextInQueue();
       }
+    }, NOTIFICATION_TIMEOUT);
 
-      broadcastState();
-      notifyNextInQueue();
+    user.notificationTimeout = timeoutId;
+
+    // Notify all sockets of this user
+    const sockets = getSocketsByName(queuedUser.name);
+    for (const socketId of sockets) {
+      io.to(socketId).emit('your_turn');
     }
-  }, NOTIFICATION_TIMEOUT);
-
-  user.notificationTimeout = timeoutId;
-
-  // Notify all sockets of this user
-  const sockets = getSocketsByName(queuedUser.name);
-  for (const socketId of sockets) {
-    io.to(socketId).emit('your_turn');
   }
 }
 
