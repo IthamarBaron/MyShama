@@ -107,6 +107,9 @@ function updateUserStatus(name, status, additionalData = {}) {
       user.status = status;
       user.joinedAt = timestamp;
       Object.assign(user, additionalData);
+      if (status !== 'queue') {
+        user.notificationSent = false;
+      }
     }
   }
 }
@@ -139,26 +142,28 @@ function notifyNextInQueue() {
     const user = getUserByName(queuedUser.name);
     if (!user) continue;
 
-    // Set up timeout
-    const timeoutId = setTimeout(() => {
-      const currentUser = getUserByName(queuedUser.name);
-      if (currentUser && currentUser.status === 'queue') {
-        updateUserStatus(queuedUser.name, 'idle');
-        const sockets = getSocketsByName(queuedUser.name);
-        for (const sid of sockets) {
-          io.to(sid).emit('queue_timeout');
+    // Only notify if not already notified (no notificationSent flag)
+    if (!user.notificationSent) {
+      // Set up timeout
+      const timeoutId = setTimeout(() => {
+        const currentUser = getUserByName(queuedUser.name);
+        if (currentUser && currentUser.status === 'queue') {
+          updateUserStatus(queuedUser.name, 'idle', { notificationSent: false });
+          const sockets = getSocketsByName(queuedUser.name);
+          for (const sid of sockets) {
+            io.to(sid).emit('queue_timeout');
+          }
+          broadcastState();
+          notifyNextInQueue();
         }
-        broadcastState();
-        notifyNextInQueue();
+      }, NOTIFICATION_TIMEOUT);
+      user.notificationTimeout = timeoutId;
+      user.notificationSent = true;
+      // Notify all sockets of this user
+      const sockets = getSocketsByName(queuedUser.name);
+      for (const socketId of sockets) {
+        io.to(socketId).emit('your_turn');
       }
-    }, NOTIFICATION_TIMEOUT);
-
-    user.notificationTimeout = timeoutId;
-
-    // Notify all sockets of this user
-    const sockets = getSocketsByName(queuedUser.name);
-    for (const socketId of sockets) {
-      io.to(socketId).emit('your_turn');
     }
   }
 }
