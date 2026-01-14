@@ -22,7 +22,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Serve static files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory storage
 const users = new Map(); // socketId -> {name, status, joinedAt, notificationTimeout}
@@ -184,36 +184,40 @@ io.on('connection', (socket) => {
     
     const nameLower = sanitized.toLowerCase();
     
-    // Check if name exists
-    const existingUser = getUserByName(sanitized);
-    
-    if (existingUser) {
-      // Name already exists, add this socket to the same user
-      if (!nameToSockets.has(nameLower)) {
-        nameToSockets.set(nameLower, new Set());
+    // If this socket is already associated with the name, allow (tab refresh or reconnect)
+    if (nameToSockets.has(nameLower) && nameToSockets.get(nameLower).has(socket.id)) {
+      // Make sure this socket is in the users map (in case of tab refresh or reconnect)
+      if (!users.has(socket.id)) {
+        users.set(socket.id, {
+          name: sanitized,
+          status: 'idle',
+          joinedAt: Date.now(),
+          notificationTimeout: null
+        });
       }
-      nameToSockets.get(nameLower).add(socket.id);
-      
-      users.set(socket.id, {
-        name: existingUser.name,
-        status: existingUser.status,
-        joinedAt: existingUser.joinedAt,
-        notificationTimeout: existingUser.notificationTimeout
-      });
-    } else {
-      // New user
-      if (!nameToSockets.has(nameLower)) {
-        nameToSockets.set(nameLower, new Set());
-      }
-      nameToSockets.get(nameLower).add(socket.id);
-      
-      users.set(socket.id, {
-        name: sanitized,
-        status: 'idle',
-        joinedAt: Date.now(),
-        notificationTimeout: null
-      });
+      socket.emit('login_success', { name: sanitized });
+      broadcastState();
+      return;
     }
+    
+    // If the name is already in use by any other socket, block
+    if (nameToSockets.has(nameLower) && nameToSockets.get(nameLower).size > 0) {
+      socket.emit('login_error', 'Name already in use');
+      return;
+    }
+    
+    // New user or first tab for this name
+    if (!nameToSockets.has(nameLower)) {
+      nameToSockets.set(nameLower, new Set());
+    }
+    nameToSockets.get(nameLower).add(socket.id);
+    
+    users.set(socket.id, {
+      name: sanitized,
+      status: 'idle',
+      joinedAt: Date.now(),
+      notificationTimeout: null
+    });
     
     socket.emit('login_success', { name: sanitized });
     broadcastState();
