@@ -225,24 +225,29 @@ io.on('connection', (socket) => {
     if (!user) return;
 
     const state = getState();
-    const outsideFull = state.outside.length >= MAX_OUTSIDE;
-    const queueNotEmpty = state.queue.length > 0;
+    const outsideCount = state.outside.length;
+    const queueCount = state.queue.length;
+    const availableSlots = MAX_OUTSIDE - outsideCount;
     const isUserQueued = state.queue.some(u => u.name.toLowerCase() === user.name.toLowerCase());
-    const isFirstInQueue = queueNotEmpty && state.queue[0].name.toLowerCase() === user.name.toLowerCase();
+    const queueIndex = state.queue.findIndex(u => u.name.toLowerCase() === user.name.toLowerCase());
 
     // Clear any existing notification timeout
     clearUserNotificationTimeout(user.name);
 
-    if (queueNotEmpty) {
-      // If there is a queue, only first in queue can leave
-      if (isUserQueued && isFirstInQueue && !outsideFull) {
+    if (queueCount > 0) {
+      // If user is in the first N of the queue, where N = availableSlots, allow to leave
+      if (isUserQueued && queueIndex > -1 && queueIndex < availableSlots) {
+        updateUserStatus(user.name, 'outside');
+      } else if (!isUserQueued && queueCount < availableSlots) {
+        // If there are more slots than queued users, allow idle user to leave
         updateUserStatus(user.name, 'outside');
       } else {
+        // Otherwise, join or stay in queue
         updateUserStatus(user.name, 'queue');
       }
     } else {
       // No queue, anyone can leave if there is space
-      if (!outsideFull) {
+      if (outsideCount < MAX_OUTSIDE) {
         updateUserStatus(user.name, 'outside');
       } else {
         updateUserStatus(user.name, 'queue');
