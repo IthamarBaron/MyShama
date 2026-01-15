@@ -27,12 +27,22 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <button 
-                id="mainActionBtn"
-                class="w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200"
-            >
-            </button>
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6 flex flex-col items-center">
+            <div class="w-full flex flex-col md:flex-row gap-4" id="leaveNowBtnWrapper">
+                <button
+                    id="mainActionBtn"
+                    class="w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200"
+                >
+                </button>
+                <button
+                    id="leaveNowBtn"
+                    class="w-full py-4 rounded-lg font-semibold text-white text-lg transition duration-200 bg-yellow-500 hover:bg-yellow-600 focus:outline-none"
+                    data-en="Let me leave without queue 1$" data-he="תוציא אותי בלי תור 1$"
+                    style="max-width: 100%;"
+                >
+                    Let me leave without queue
+                </button>
+            </div>
         </div>
 
         <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
@@ -64,6 +74,13 @@
         </div>
     </div>
 
+    <div id="leaveNowModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;">
+        <div style="position:relative; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; align-items:center;">
+            <button id="closeLeaveNowModal" style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.5); color:white; border:none; border-radius:50%; width:32px; height:32px; font-size:20px; cursor:pointer;">✕</button>
+            <img src="https://i.imgflip.com/39tpjg.jpg" alt="Let me leave immediately" style="max-width:80vw; max-height:80vh; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,0.3);">
+        </div>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
@@ -89,6 +106,9 @@
             document.querySelectorAll('[data-en][data-he]').forEach(el => {
                 el.textContent = el.getAttribute(`data-${lang}`);
             });
+
+            // Update leave now button text
+            document.getElementById('leaveNowBtn').textContent = document.getElementById('leaveNowBtn').getAttribute(`data-${lang}`);
             
             updateButton();
         }
@@ -295,6 +315,15 @@
                 // Do not set userStatus here; wait for server update
             }
             // updateButton(); // No need to call here, will update on server response
+        });
+
+        document.getElementById('leaveNowBtn').addEventListener('click', () => {
+            document.getElementById('leaveNowModal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        });
+        document.getElementById('closeLeaveNowModal').addEventListener('click', () => {
+            document.getElementById('leaveNowModal').style.display = 'none';
+            document.body.style.overflow = '';
         });
 
         // Handle tab close
